@@ -25,6 +25,7 @@ jobs:
       - name: Sync develop (rebase)
         id: sync-rebase
         run: |
+          git pull origin develop
           git fetch --all
           git rebase origin/main develop
           if git push origin develop; then
