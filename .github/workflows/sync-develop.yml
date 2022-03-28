@@ -21,7 +21,7 @@ jobs:
         id: sync-rebase
         run: |
           git fetch --all
-          git rebase main develop
+          git rebase origin/main develop
           if git push origin develop; then
             echo "::set-output name=result::true"
           else
@@ -31,5 +31,5 @@ jobs:
       - name: Sync develop (merge)
         if: steps.sync-rebase.outputs.result == 'false'
         run: |
-          git merge main
+          git merge origin/main
           git push origin develop
