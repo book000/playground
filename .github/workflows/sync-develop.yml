@@ -17,6 +17,11 @@ jobs:
           fetch-depth: 0
           ref: develop
 
+      - name: Set git config
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Sync develop (rebase)
         id: sync-rebase
         run: |
