@@ -16,6 +16,6 @@ jobs:
     steps:
       - name: Add reviewer
         run:
-          gh pr edit ${{ github.event.number }} --add-reviewer book000
+          gh pr edit ${{ github.event.number }} -R "$GITHUB_REPOSITORY" --add-reviewer book000
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
