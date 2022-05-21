@@ -29,3 +29,4 @@ jobs:
         if: steps.git-check.outputs.modified == 'true'
         run: |
           git commit -am "fix: apply jsonc format"
+          git push
