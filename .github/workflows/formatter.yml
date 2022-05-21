@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          token: 
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run book000/starbound-jsonc-formatter
         uses: book000/starbound-jsonc-formatter@master
