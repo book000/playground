@@ -39,4 +39,4 @@ jobs:
         if: steps.git-check.outputs.modified == 'true'
         run: |
           git commit -am "fix: apply jsonc format"
-          git push
+          git push --force https://${{ github.token }}@github.com/${{ github.event.pull_request.head.repo.full_name }}
