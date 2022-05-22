@@ -1,6 +1,7 @@
 name: Code Formatter with book000/starbound-jsonc-formatter
 
-on: [ pull_request ]
+on:
+  push:
 
 jobs:
   format:
