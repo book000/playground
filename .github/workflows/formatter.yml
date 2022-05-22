@@ -2,6 +2,9 @@ name: Code Formatter with book000/starbound-jsonc-formatter
 
 on:
   push:
+    branches-ignore:
+      - master
+      - main
 
 jobs:
   format:
@@ -26,9 +29,9 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config pull.rebase true
 
-      - name: Push changes
-        uses: ad-m/github-push-action@master
+      - name: push changes
+        id: push-changes
         if: steps.git-check.outputs.modified == 'true'
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git commit -am "fix: apply jsonc format"
+          git push origin
