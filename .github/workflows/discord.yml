@@ -16,6 +16,6 @@ jobs:
               {
                 "title": "RSS Update Failed",
                 "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                "color": 0xff0000
+                "color": 16711680
               }
             ]
