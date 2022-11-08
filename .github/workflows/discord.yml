@@ -1,4 +1,4 @@
-name: Context testing
+name: Discord
 
 on:
   workflow_dispatch:
@@ -16,6 +16,6 @@ jobs:
               {
                 "title": "RSS Update Failed",
                 "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                "color": 255
+                "color": 0xff0000
               }
             ]
