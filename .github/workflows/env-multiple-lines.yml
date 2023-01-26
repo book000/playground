@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: Test
         run: |
-          echo "target=${{ env.TARGETS ) }} " >> $GITHUB_OUTPUT
+          echo "target=${{ env.TARGETS }} " >> $GITHUB_OUTPUT
 
   test:
     runs-on: ubuntu-latest
