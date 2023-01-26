@@ -4,9 +4,11 @@ on:
   workflow_dispatch:
 
 env: 
-  TARGETS:
-    - '{ imageName: "tomacheese/my-pixiv", file: "view.Dockerfile", packageName: "my-pixiv" }'
-    - '{ imageName: "tomacheese/my-pixiv-api", file: "api.Dockerfile", packageName: "my-pixiv-api" }'
+  TARGETS: >-
+    [
+      { imageName: "tomacheese/my-pixiv", file: "view.Dockerfile", packageName: "my-pixiv" },
+      { imageName: "tomacheese/my-pixiv-api", file: "api.Dockerfile", packageName: "my-pixiv-api" }
+    ]
 
 jobs:
   test:
@@ -14,4 +16,4 @@ jobs:
     steps:
       - name: Test
         run: |
-          echo $TARGETS
+          echo ${{ fromJSON($TARGETS) }}
