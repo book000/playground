@@ -16,4 +16,4 @@ jobs:
     steps:
       - name: Test
         run: |
-          echo ${{ fromJSON($TARGETS) }}
+          echo ${{ fromJSON( env.TARGETS ) }}
