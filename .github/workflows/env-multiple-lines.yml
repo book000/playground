@@ -20,8 +20,12 @@ jobs:
       
     steps:
       - name: Test
-        run: |
-          echo "target=${{ env.TARGETS }} " >> $GITHUB_OUTPUT
+        uses: actions/github-script@v6
+        with:
+          script: |
+            core.setOutput('targets', process.env.TARGETS)
+        env:
+          TARGETS: ${{ env.TARGETS }}
 
   test:
     runs-on: ubuntu-latest
