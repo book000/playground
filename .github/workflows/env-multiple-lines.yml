@@ -43,10 +43,6 @@ jobs:
         run: |
           echo ${{ matrix.target.packageName }}
 
-      - name: Test 2
-        run: |
-          echo ${{ toJSON(matrix.target) }}
-
       - name: Test 3
         run: |
           echo "matrix=[$(echo "$PLATFORMS" | sed -r -e 's/([^,]+)/\"\1\"/g' -e 's/([^,]+),/\1,/g')]"
