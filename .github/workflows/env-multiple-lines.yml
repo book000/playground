@@ -19,7 +19,8 @@ jobs:
       targets: ${{ steps.targets.outputs.targets }}
       
     steps:
-      - name: Test
+      - name: Create targets
+        id: targets
         uses: actions/github-script@v6
         with:
           script: |
