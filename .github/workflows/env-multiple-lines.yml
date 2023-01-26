@@ -9,11 +9,19 @@ env:
       { imageName: "tomacheese/my-pixiv", file: "view.Dockerfile", packageName: "my-pixiv" },
       { imageName: "tomacheese/my-pixiv-api", file: "api.Dockerfile", packageName: "my-pixiv-api" }
     ]
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        target: ${{ fromJSON( env.TARGETS ) }}
+    
     steps:
       - name: Test
         run: |
-          echo ${{ fromJSON( env.TARGETS ) }}
+          echo ${{ matrix.target }}
+          echo ${{ fromJson(matrix.target).packageName }}
+          echo "matrix=[$(echo "$PLATFORMS" | sed -r -e 's/([^,]+)/\"\1\"/g' -e 's/([^,]+),/\1,/g')]"
