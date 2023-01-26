@@ -12,12 +12,26 @@ env:
   PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
+  pre:
+    runs-on: ubuntu-latest
+    
+    outputs:
+      targets: ${{ steps.targets.outputs.targets }}
+      
+    steps:
+      - name: Test
+        run: |
+          echo "target=${{ env.TARGETS ) }} " >> $GITHUB_OUTPUT
+
   test:
     runs-on: ubuntu-latest
     
+    needs:
+      - pre
+    
     strategy:
       matrix:
-        target: ${{ fromJSON( env.TARGETS ) }}
+        target: ${{ fromJSON( needs.pre.outputs.targets ) }}
     
     steps:
       - name: Test
