@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout
-        run: gh pr checkout ${{ github.event.issue.number }}
+        run: gh pr checkout ${{ github.event.issue.number }} -R ${{ github.event.repository.full_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
