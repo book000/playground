@@ -32,6 +32,7 @@ jobs:
       - name: Is modified
         id: is-modified
         run: |
+          git status
           git status | grep modified | wc -l | xargs -I{} echo "modified={}" >> $GITHUB_OUTPUT
 
       - name: Create commit and push
