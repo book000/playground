@@ -36,7 +36,7 @@ jobs:
           git status | grep modified | wc -l | xargs -I{} echo "modified={}" >> $GITHUB_OUTPUT
 
       - name: Create commit and push
-        if: ${{ steps.is-modified.outputs.modified == '0' }}
+        if: ${{ steps.is-modified.outputs.modified != '0' }}
         run: |
           git add -A
           git commit -m "feat: Update date"
