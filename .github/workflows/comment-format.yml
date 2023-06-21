@@ -1,0 +1,45 @@
+name: Comment to format
+
+on:
+  issue_comment:
+    types:
+      - created
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.issue.pull_request != null &&
+      github.event.sender.id == 8929706 &&
+      contains(github.event.comment.body, '@github-actions') &&
+      contains(github.event.comment.body, 'format')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.issue.pull_request.head.sha }}
+
+      - name: Add text
+        run: |
+          date >> date.txt
+
+      - name: Set git config
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Is modified
+        id: is-modified
+        run: |
+          git status | grep modified
+          echo "modified=$?" >> $GITHUB_OUTPUT
+
+      - name: Create commit and push
+        if: ${{ steps.is-modified.outputs.modified == '0' }}
+        run: |
+          git add -A
+          git commit -m "feat: Update date"
+          git push origin HEAD
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
