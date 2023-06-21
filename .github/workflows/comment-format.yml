@@ -43,6 +43,7 @@ jobs:
         run: |
           git add -A
           git commit -m "feat: Update date"
+          git config --global push.default current
           hub push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
