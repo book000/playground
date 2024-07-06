@@ -23,7 +23,8 @@ jobs:
           mode: ngrok
         env:
           NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
-
           NGROK_REGION: jp
-
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+
+      - name: Sleep 30 minutes
+        run: sleep 1800
