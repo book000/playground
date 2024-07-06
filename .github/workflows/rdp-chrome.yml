@@ -1,0 +1,29 @@
+name: RDP Chrome with SSH via ngrok
+
+on:
+  workflow_dispatch:
+
+jobs:
+  chrome:
+    runs-on: ubuntu-latest
+
+    services:
+      chrome:
+        image: siomiz/chrome
+        ports:
+          - 5900:5900
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v3
+
+      - name: Start SSH via ngrok
+        uses: rdp-studio/ssh2actions@main
+        with:
+          mode: ngrok
+        env:
+          NGROK_TOKEN: ${{ secrets.NGROK_TOKEN }}
+
+          NGROK_REGION: ja
+
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
