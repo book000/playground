@@ -14,4 +14,4 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Run Copilot Review Enforcer
-        uses: book000/copilot-review-enforcer@v1.1.1
+        uses: book000/copilot-review-enforcer@v1.1.2
