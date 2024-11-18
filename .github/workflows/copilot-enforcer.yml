@@ -2,7 +2,7 @@ name: Copilot Review Enforcer
 
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, synchronize]
   pull_request_review_comment:
     types: [created, edited, deleted]
 
