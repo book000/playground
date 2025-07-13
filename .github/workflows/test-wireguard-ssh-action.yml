@@ -15,7 +15,7 @@ on:
 jobs:
   test-action:
     runs-on: ubuntu-latest
-    
+
     services:
       # WireGuard server container
       wireguard:
@@ -38,8 +38,8 @@ jobs:
           --sysctl net.ipv4.conf.all.src_valid_mark=1
           --sysctl net.ipv4.ip_forward=1
           --hostname wireguard
-      
-      # SSH server container  
+
+      # SSH server container
       ssh-server:
         image: linuxserver/openssh-server:latest
         env:
@@ -63,31 +63,31 @@ jobs:
         run: |
           # Generate SSH key pair for testing
           ssh-keygen -t rsa -b 2048 -f ./test_ssh_key -N ""
-          
+
           # Generate WireGuard keys
           sudo apt-get update
           sudo apt-get install -y wireguard-tools
-          
+
           # Generate client private key
           CLIENT_PRIVATE_KEY=$(wg genkey)
           CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
-          
-          # Generate server private key  
+
+          # Generate server private key
           SERVER_PRIVATE_KEY=$(wg genkey)
           SERVER_PUBLIC_KEY=$(echo "$SERVER_PRIVATE_KEY" | wg pubkey)
-          
+
           echo "CLIENT_PRIVATE_KEY=$CLIENT_PRIVATE_KEY" >> $GITHUB_ENV
           echo "CLIENT_PUBLIC_KEY=$CLIENT_PUBLIC_KEY" >> $GITHUB_ENV
           echo "SERVER_PRIVATE_KEY=$SERVER_PRIVATE_KEY" >> $GITHUB_ENV
           echo "SERVER_PUBLIC_KEY=$SERVER_PUBLIC_KEY" >> $GITHUB_ENV
-          
+
           # Create test file for SCP testing
           echo "Hello from GitHub Actions test!" > test_upload.txt
-          
+
           # Get SSH public key content
           SSH_PUBLIC_KEY=$(cat test_ssh_key.pub)
           SSH_PRIVATE_KEY=$(cat test_ssh_key)
-          
+
           # Store keys in environment (normally these would be secrets)
           echo "SSH_PUBLIC_KEY=$SSH_PUBLIC_KEY" >> $GITHUB_ENV
           echo "SSH_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
@@ -106,7 +106,7 @@ jobs:
             echo "Waiting for SSH server... ($i/30)"
             sleep 2
           done
-          
+
           # Wait for WireGuard server to be ready
           echo "Waiting for WireGuard server to be ready..."
           for i in {1..30}; do
@@ -121,17 +121,21 @@ jobs:
       - name: Configure SSH server
         run: |
           # Copy public key to SSH server container
-          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") mkdir -p /config/.ssh
-          echo "$SSH_PUBLIC_KEY" | docker exec -i $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") tee /config/.ssh/authorized_keys
-          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") chown -R 1000:1000 /config/.ssh
-          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") chmod 700 /config/.ssh
-          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") chmod 600 /config/.ssh/authorized_keys
+          CONTAINER_ID=$(docker ps -q \
+            --filter "ancestor=linuxserver/openssh-server:latest")
+          docker exec $CONTAINER_ID mkdir -p /config/.ssh
+          echo "$SSH_PUBLIC_KEY" | docker exec -i $CONTAINER_ID \
+            tee /config/.ssh/authorized_keys
+          docker exec $CONTAINER_ID chown -R 1000:1000 /config/.ssh
+          docker exec $CONTAINER_ID chmod 700 /config/.ssh
+          docker exec $CONTAINER_ID chmod 600 /config/.ssh/authorized_keys
 
       - name: Test SSH operation with ping check
         uses: ./
         with:
           operation: ssh
-          command: 'hostname && whoami && pwd && echo "SSH test successful!"'
+          command: >-
+            hostname && whoami && pwd && echo "SSH test successful!"
           ping-check: 'true'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: '10.13.13.2/24'
@@ -143,7 +147,8 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Test SSH operation without ping check
@@ -162,7 +167,8 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Test SCP upload operation
@@ -183,7 +189,8 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Verify SCP upload worked
@@ -202,7 +209,8 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Create file on remote for download test
@@ -221,7 +229,8 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Test SCP download operation
@@ -242,14 +251,15 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Verify SCP download worked
         run: |
           echo "Contents of downloaded file:"
           cat downloaded_file.txt
-          
+
           if grep -q "Download test file" downloaded_file.txt; then
             echo "✅ SCP download test passed!"
           else
@@ -275,19 +285,23 @@ jobs:
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
           ssh-host-ip: '10.13.13.1'
-          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-host-key: >-
+            ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...
           ssh-port: '2222'
 
       - name: Verify error handling worked
         run: |
           if [ "${{ steps.test-error.outcome }}" = "failure" ]; then
-            echo "✅ Error handling test passed - SCP operation correctly failed with missing parameters"
+            echo "✅ Error handling test passed - SCP operation correctly \
+              failed with missing parameters"
           else
-            echo "❌ Error handling test failed - SCP operation should have failed"
+            echo "❌ Error handling test failed - SCP operation should have \
+              failed"
             exit 1
           fi
 
       - name: Cleanup test files
         if: always()
         run: |
-          rm -f test_ssh_key test_ssh_key.pub test_upload.txt downloaded_file.txt
+          rm -f test_ssh_key test_ssh_key.pub test_upload.txt \
+            downloaded_file.txt
