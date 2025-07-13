@@ -2,7 +2,7 @@
 name: Test WireGuard SSH Action (Simple)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: true
   push:
     paths:
       - 'action.yml'
@@ -177,6 +177,7 @@ jobs:
               # Check for expected step names
               step_names = [step.get('name', '') for step in steps]
               expected_steps = [
+                  'Validate inputs',
                   'Install WireGuard',
                   'Setup WireGuard configuration',
                   'Start WireGuard VPN',

@@ -5,7 +5,7 @@ description: >-
   execute SSH commands or SCP file transfers
 author: 'book000'
 branding:
-  icon: 'shield'
+  icon: 'link'
   color: 'blue'
 
 inputs:
@@ -100,6 +100,21 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        # Validate SCP operation inputs
+        if [ "${{ inputs.operation }}" = "scp" ]; then
+          if [ -z "${{ inputs.scp-source }}" ] || \
+             [ -z "${{ inputs.scp-destination }}" ]; then
+            echo "Error: scp-source and scp-destination are required" \
+                 "when operation=scp"
+            exit 1
+          fi
+        fi
+
+        echo "✅ Input validation passed"
+
     - name: Install WireGuard
       shell: bash
       run: |
@@ -206,14 +221,6 @@ runs:
       shell: bash
       if: ${{ inputs.operation == 'scp' && inputs.scp-direction == 'upload' }}
       run: |
-        # Validate SCP inputs
-        if [ -z "${{ inputs.scp-source }}" ] || \
-           [ -z "${{ inputs.scp-destination }}" ]; then
-          echo "Error: scp-source and scp-destination are required" \
-            "when operation=scp"
-          exit 1
-        fi
-
         # Upload file from local to remote
         echo "Uploading file from local to remote..."
         scp "${{ inputs.scp-source }}" \
@@ -223,14 +230,6 @@ runs:
       shell: bash
       if: ${{ inputs.operation == 'scp' && inputs.scp-direction == 'download' }}
       run: |
-        # Validate SCP inputs
-        if [ -z "${{ inputs.scp-source }}" ] || \
-           [ -z "${{ inputs.scp-destination }}" ]; then
-          echo "Error: scp-source and scp-destination are required" \
-            "when operation=scp"
-          exit 1
-        fi
-
         # Download file from remote to local
         echo "Downloading file from remote to local..."
         scp ${{ inputs.ssh-hostname }}:"${{ inputs.scp-source }}" \

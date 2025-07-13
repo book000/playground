@@ -2,7 +2,7 @@
 name: Test WireGuard SSH Action
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: true
   push:
     paths:
       - 'action.yml'
