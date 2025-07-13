@@ -106,7 +106,7 @@ jobs:
       - name: SSH to home server
         run: |
           # Execute command on home server via SSH through VPN
-          ssh ${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOSTNAME }} "${{ github.event.inputs.command }}"
+          ssh ${{ secrets.HOME_SERVER_HOSTNAME }} "${{ github.event.inputs.command }}"
 
       - name: Cleanup
         if: always()
@@ -116,3 +116,6 @@ jobs:
           
           # Remove SSH key
           rm -f /tmp/id_rsa
+          
+          # Remove SSH config
+          rm -f ~/.ssh/config
