@@ -8,10 +8,33 @@ branding:
   color: 'blue'
 
 inputs:
+  operation:
+    description: 'Operation type: ssh (execute command) or scp (file transfer)'
+    required: false
+    default: 'ssh'
+
   command:
-    description: 'Command to execute on the remote server'
+    description: 'Command to execute on the remote server (only used when operation=ssh)'
     required: false
     default: 'hostname && whoami && pwd'
+
+  scp-source:
+    description: 'Source path for SCP operation (only used when operation=scp)'
+    required: false
+
+  scp-destination:
+    description: 'Destination path for SCP operation (only used when operation=scp)'
+    required: false
+
+  scp-direction:
+    description: 'SCP direction: upload (local to remote) or download (remote to local) (only used when operation=scp)'
+    required: false
+    default: 'upload'
+
+  ping-check:
+    description: 'Enable ping connectivity test before SSH/SCP operations'
+    required: false
+    default: 'true'
 
   # WireGuard Configuration
   wireguard-private-key:
@@ -162,15 +185,39 @@ runs:
 
     - name: Test VPN connectivity
       shell: bash
+      if: ${{ inputs.ping-check == 'true' }}
       run: |
         # Test ping to server through VPN
         ping -c 3 ${{ inputs.ssh-host-ip }}
 
-    - name: SSH to remote server
+    - name: Execute SSH command or SCP operation
       shell: bash
       run: |
-        # Execute command on remote server via SSH through VPN
-        ssh ${{ inputs.ssh-hostname }} "${{ inputs.command }}"
+        if [ "${{ inputs.operation }}" = "ssh" ]; then
+          # Execute command on remote server via SSH through VPN
+          ssh ${{ inputs.ssh-hostname }} "${{ inputs.command }}"
+        elif [ "${{ inputs.operation }}" = "scp" ]; then
+          # Validate SCP inputs
+          if [ -z "${{ inputs.scp-source }}" ] || [ -z "${{ inputs.scp-destination }}" ]; then
+            echo "Error: scp-source and scp-destination are required when operation=scp"
+            exit 1
+          fi
+          
+          # Perform SCP operation
+          if [ "${{ inputs.scp-direction }}" = "upload" ]; then
+            echo "Uploading file from local to remote..."
+            scp "${{ inputs.scp-source }}" ${{ inputs.ssh-hostname }}:"${{ inputs.scp-destination }}"
+          elif [ "${{ inputs.scp-direction }}" = "download" ]; then
+            echo "Downloading file from remote to local..."
+            scp ${{ inputs.ssh-hostname }}:"${{ inputs.scp-source }}" "${{ inputs.scp-destination }}"
+          else
+            echo "Error: scp-direction must be 'upload' or 'download'"
+            exit 1
+          fi
+        else
+          echo "Error: operation must be 'ssh' or 'scp'"
+          exit 1
+        fi
 
     - name: Cleanup
       shell: bash

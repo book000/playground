@@ -1,0 +1,293 @@
+---
+name: Test WireGuard SSH Action
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-wireguard-ssh-action.yml'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-wireguard-ssh-action.yml'
+
+jobs:
+  test-action:
+    runs-on: ubuntu-latest
+    
+    services:
+      # WireGuard server container
+      wireguard:
+        image: linuxserver/wireguard:latest
+        env:
+          PUID: 1000
+          PGID: 1000
+          TZ: UTC
+          SERVERURL: wireguard
+          SERVERPORT: 51820
+          PEERS: client
+          PEERDNS: auto
+          INTERNAL_SUBNET: 10.13.13.0
+          ALLOWEDIPS: 10.13.13.0/24
+        ports:
+          - 51820:51820/udp
+        options: >-
+          --cap-add=NET_ADMIN
+          --cap-add=SYS_MODULE
+          --sysctl net.ipv4.conf.all.src_valid_mark=1
+          --sysctl net.ipv4.ip_forward=1
+          --hostname wireguard
+      
+      # SSH server container  
+      ssh-server:
+        image: linuxserver/openssh-server:latest
+        env:
+          PUID: 1000
+          PGID: 1000
+          TZ: UTC
+          PUBLIC_KEY_FILE: /config/authorized_keys
+          SUDO_ACCESS: true
+          PASSWORD_ACCESS: false
+          USER_NAME: testuser
+        ports:
+          - 2222:2222
+        options: >-
+          --hostname ssh-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup test environment
+        run: |
+          # Generate SSH key pair for testing
+          ssh-keygen -t rsa -b 2048 -f ./test_ssh_key -N ""
+          
+          # Generate WireGuard keys
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools
+          
+          # Generate client private key
+          CLIENT_PRIVATE_KEY=$(wg genkey)
+          CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
+          
+          # Generate server private key  
+          SERVER_PRIVATE_KEY=$(wg genkey)
+          SERVER_PUBLIC_KEY=$(echo "$SERVER_PRIVATE_KEY" | wg pubkey)
+          
+          echo "CLIENT_PRIVATE_KEY=$CLIENT_PRIVATE_KEY" >> $GITHUB_ENV
+          echo "CLIENT_PUBLIC_KEY=$CLIENT_PUBLIC_KEY" >> $GITHUB_ENV
+          echo "SERVER_PRIVATE_KEY=$SERVER_PRIVATE_KEY" >> $GITHUB_ENV
+          echo "SERVER_PUBLIC_KEY=$SERVER_PUBLIC_KEY" >> $GITHUB_ENV
+          
+          # Create test file for SCP testing
+          echo "Hello from GitHub Actions test!" > test_upload.txt
+          
+          # Get SSH public key content
+          SSH_PUBLIC_KEY=$(cat test_ssh_key.pub)
+          SSH_PRIVATE_KEY=$(cat test_ssh_key)
+          
+          # Store keys in environment (normally these would be secrets)
+          echo "SSH_PUBLIC_KEY=$SSH_PUBLIC_KEY" >> $GITHUB_ENV
+          echo "SSH_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+          echo "$SSH_PRIVATE_KEY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Wait for services to be ready
+        run: |
+          # Wait for SSH server to be ready
+          echo "Waiting for SSH server to be ready..."
+          for i in {1..30}; do
+            if nc -z localhost 2222; then
+              echo "SSH server is ready"
+              break
+            fi
+            echo "Waiting for SSH server... ($i/30)"
+            sleep 2
+          done
+          
+          # Wait for WireGuard server to be ready
+          echo "Waiting for WireGuard server to be ready..."
+          for i in {1..30}; do
+            if nc -zu localhost 51820; then
+              echo "WireGuard server is ready"
+              break
+            fi
+            echo "Waiting for WireGuard server... ($i/30)"
+            sleep 2
+          done
+
+      - name: Configure SSH server
+        run: |
+          # Copy public key to SSH server container
+          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") mkdir -p /config/.ssh
+          echo "$SSH_PUBLIC_KEY" | docker exec -i $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") tee /config/.ssh/authorized_keys
+          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") chown -R 1000:1000 /config/.ssh
+          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") chmod 700 /config/.ssh
+          docker exec $(docker ps -q --filter "ancestor=linuxserver/openssh-server:latest") chmod 600 /config/.ssh/authorized_keys
+
+      - name: Test SSH operation with ping check
+        uses: ./
+        with:
+          operation: ssh
+          command: 'hostname && whoami && pwd && echo "SSH test successful!"'
+          ping-check: 'true'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Test SSH operation without ping check
+        uses: ./
+        with:
+          operation: ssh
+          command: 'echo "SSH test without ping successful!"'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Test SCP upload operation
+        uses: ./
+        with:
+          operation: scp
+          scp-source: 'test_upload.txt'
+          scp-destination: '/tmp/uploaded_file.txt'
+          scp-direction: 'upload'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Verify SCP upload worked
+        uses: ./
+        with:
+          operation: ssh
+          command: 'cat /tmp/uploaded_file.txt'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Create file on remote for download test
+        uses: ./
+        with:
+          operation: ssh
+          command: 'echo "Download test file" > /tmp/download_test.txt'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Test SCP download operation
+        uses: ./
+        with:
+          operation: scp
+          scp-source: '/tmp/download_test.txt'
+          scp-destination: './downloaded_file.txt'
+          scp-direction: 'download'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Verify SCP download worked
+        run: |
+          echo "Contents of downloaded file:"
+          cat downloaded_file.txt
+          
+          if grep -q "Download test file" downloaded_file.txt; then
+            echo "✅ SCP download test passed!"
+          else
+            echo "❌ SCP download test failed!"
+            exit 1
+          fi
+
+      - name: Test error handling - missing SCP parameters
+        id: test-error
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: scp
+          # Missing scp-source and scp-destination
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'localhost:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7...'  # Placeholder
+          ssh-port: '2222'
+
+      - name: Verify error handling worked
+        run: |
+          if [ "${{ steps.test-error.outcome }}" = "failure" ]; then
+            echo "✅ Error handling test passed - SCP operation correctly failed with missing parameters"
+          else
+            echo "❌ Error handling test failed - SCP operation should have failed"
+            exit 1
+          fi
+
+      - name: Cleanup test files
+        if: always()
+        run: |
+          rm -f test_ssh_key test_ssh_key.pub test_upload.txt downloaded_file.txt

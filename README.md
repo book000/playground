@@ -1,61 +1,33 @@
 # WireGuard SSH Action
 
-A GitHub Action that connects to a remote server via WireGuard VPN and executes SSH commands securely.
+A GitHub Action that connects to a remote server via WireGuard VPN and executes SSH commands or performs SCP file transfers securely.
 
 ## Features
 
 - Connect to remote networks through WireGuard VPN from GitHub hosted runners
 - Execute SSH commands on remote servers through the VPN connection
+- Perform SCP file transfers (upload/download) through the VPN connection
+- Optional ping connectivity check (can be disabled for faster execution)
 - Secure configuration management using GitHub Secrets
 - Automatic cleanup of temporary files and connections
 - Support for optional PresharedKey for enhanced security
 
-## Usage
+## Operations
 
-### Basic Example
+### SSH Command Execution
 
-```yaml
-name: Remote Server Access
-on:
-  workflow_dispatch:
-    inputs:
-      command:
-        description: 'Command to execute'
-        required: false
-        default: 'hostname && whoami && pwd'
-
-jobs:
-  ssh-via-wireguard:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Connect and execute command
-        uses: book000/playground@main
-        with:
-          command: ${{ github.event.inputs.command }}
-          wireguard-private-key: ${{ secrets.WIREGUARD_PRIVATE_KEY }}
-          wireguard-address: ${{ secrets.WIREGUARD_ADDRESS }}
-          wireguard-peer-public-key: ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
-          wireguard-endpoint: ${{ secrets.WIREGUARD_ENDPOINT }}
-          wireguard-allowed-ips: ${{ secrets.WIREGUARD_ALLOWED_IPS }}
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-          ssh-user: ${{ secrets.SSH_USER }}
-          ssh-hostname: ${{ secrets.SSH_HOSTNAME }}
-          ssh-host-ip: ${{ secrets.SSH_HOST_IP }}
-          ssh-host-key: ${{ secrets.SSH_HOST_KEY }}
-```
-
-### Advanced Example with PresharedKey
+Execute commands on remote servers via SSH through a WireGuard VPN connection.
 
 ```yaml
-- name: Connect with enhanced security
-  uses: book000/playground@main
+- name: Execute remote command
+  uses: book000/playground@v1
   with:
-    command: 'sudo systemctl status nginx'
+    operation: ssh
+    command: 'hostname && whoami && pwd'
+    ping-check: 'true'  # Optional: test connectivity before SSH
     wireguard-private-key: ${{ secrets.WIREGUARD_PRIVATE_KEY }}
     wireguard-address: ${{ secrets.WIREGUARD_ADDRESS }}
-    wireguard-dns: '8.8.8.8'
     wireguard-peer-public-key: ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
-    wireguard-preshared-key: ${{ secrets.WIREGUARD_PRESHARED_KEY }}
     wireguard-endpoint: ${{ secrets.WIREGUARD_ENDPOINT }}
     wireguard-allowed-ips: ${{ secrets.WIREGUARD_ALLOWED_IPS }}
     ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -63,14 +35,67 @@ jobs:
     ssh-hostname: ${{ secrets.SSH_HOSTNAME }}
     ssh-host-ip: ${{ secrets.SSH_HOST_IP }}
     ssh-host-key: ${{ secrets.SSH_HOST_KEY }}
-    ssh-port: '2222'
+```
+
+### SCP File Transfer
+
+Transfer files to/from remote servers via SCP through a WireGuard VPN connection.
+
+#### Upload File to Remote Server
+
+```yaml
+- name: Upload file to remote server
+  uses: book000/playground@v1
+  with:
+    operation: scp
+    scp-source: './local-file.txt'
+    scp-destination: '/remote/path/file.txt'
+    scp-direction: 'upload'
+    ping-check: 'false'  # Skip ping for faster execution
+    wireguard-private-key: ${{ secrets.WIREGUARD_PRIVATE_KEY }}
+    wireguard-address: ${{ secrets.WIREGUARD_ADDRESS }}
+    wireguard-peer-public-key: ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
+    wireguard-endpoint: ${{ secrets.WIREGUARD_ENDPOINT }}
+    wireguard-allowed-ips: ${{ secrets.WIREGUARD_ALLOWED_IPS }}
+    ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    ssh-user: ${{ secrets.SSH_USER }}
+    ssh-hostname: ${{ secrets.SSH_HOSTNAME }}
+    ssh-host-ip: ${{ secrets.SSH_HOST_IP }}
+    ssh-host-key: ${{ secrets.SSH_HOST_KEY }}
+```
+
+#### Download File from Remote Server
+
+```yaml
+- name: Download file from remote server
+  uses: book000/playground@v1
+  with:
+    operation: scp
+    scp-source: '/remote/path/file.txt'
+    scp-destination: './downloaded-file.txt'
+    scp-direction: 'download'
+    wireguard-private-key: ${{ secrets.WIREGUARD_PRIVATE_KEY }}
+    wireguard-address: ${{ secrets.WIREGUARD_ADDRESS }}
+    wireguard-peer-public-key: ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
+    wireguard-endpoint: ${{ secrets.WIREGUARD_ENDPOINT }}
+    wireguard-allowed-ips: ${{ secrets.WIREGUARD_ALLOWED_IPS }}
+    ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    ssh-user: ${{ secrets.SSH_USER }}
+    ssh-hostname: ${{ secrets.SSH_HOSTNAME }}
+    ssh-host-ip: ${{ secrets.SSH_HOST_IP }}
+    ssh-host-key: ${{ secrets.SSH_HOST_KEY }}
 ```
 
 ## Inputs
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `command` | Command to execute on remote server | No | `hostname && whoami && pwd` |
+| `operation` | Operation type: 'ssh' (execute command) or 'scp' (file transfer) | No | `ssh` |
+| `command` | Command to execute on remote server (only used when operation=ssh) | No | `hostname && whoami && pwd` |
+| `scp-source` | Source path for SCP operation (only used when operation=scp) | No | |
+| `scp-destination` | Destination path for SCP operation (only used when operation=scp) | No | |
+| `scp-direction` | SCP direction: 'upload' (local to remote) or 'download' (remote to local) | No | `upload` |
+| `ping-check` | Enable ping connectivity test before SSH/SCP operations | No | `true` |
 | `wireguard-private-key` | WireGuard client private key | Yes | |
 | `wireguard-address` | WireGuard client VPN address (e.g., 10.0.0.2/24) | Yes | |
 | `wireguard-dns` | DNS server address | No | `1.1.1.1` |
