@@ -6,29 +6,36 @@
 
 以下の secrets を GitHub リポジトリの Settings > Secrets and variables > Actions で設定してください：
 
-### `WIREGUARD_CONFIG`
-WireGuard クライアント設定ファイルの内容
+### WireGuard 設定関連
 
-```ini
-[Interface]
-PrivateKey = <クライアントの秘密鍵>
-Address = <クライアントのVPNアドレス>/24
-DNS = <DNSサーバー>
+#### `WIREGUARD_PRIVATE_KEY`
+WireGuard クライアントの秘密鍵
 
-[Peer]
-PublicKey = <サーバーの公開鍵>
-Endpoint = <サーバーのパブリックIP>:<ポート>
-AllowedIPs = <VPN内で許可するIPレンジ>
-PersistentKeepalive = 25
-```
+#### `WIREGUARD_ADDRESS`
+クライアントの VPN アドレス（例: `10.0.0.2/24`）
 
-### `HOME_SERVER_SSH_KEY`
+#### `WIREGUARD_DNS`
+DNS サーバーアドレス（例: `1.1.1.1`）
+
+#### `WIREGUARD_PEER_PUBLIC_KEY`
+WireGuard サーバーの公開鍵
+
+#### `WIREGUARD_ENDPOINT`
+サーバーのパブリック IP とポート（例: `your-server.com:51820`）
+
+#### `WIREGUARD_ALLOWED_IPS`
+VPN 内で許可する IP レンジ（例: `10.0.0.0/24`）
+
+### SSH 接続関連
+
+#### `HOME_SERVER_SSH_KEY`
 SSH 接続用の秘密鍵（RSA または Ed25519）
+※ パスワードなしの公開鍵認証で接続されます
 
-### `HOME_SERVER_USER`
+#### `HOME_SERVER_USER`
 SSH 接続用のユーザー名（sudo 権限なし）
 
-### `HOME_SERVER_HOST`
+#### `HOME_SERVER_HOST`
 VPN 内での自宅サーバーの IP アドレス
 
 ## 自宅サーバーのセットアップ
@@ -66,7 +73,18 @@ PublicKey = <クライアントの公開鍵>
 AllowedIPs = <クライアントのVPNアドレス>/32
 ```
 
-### 3. SSH設定の強化（オプション）
+### 3. GitHub Secrets の設定例
+
+WireGuard の設定を各項目ごとに個別の secrets として設定：
+
+- `WIREGUARD_PRIVATE_KEY`: `aBcD1234...` (クライアントの秘密鍵)
+- `WIREGUARD_ADDRESS`: `10.0.0.2/24`
+- `WIREGUARD_DNS`: `1.1.1.1`
+- `WIREGUARD_PEER_PUBLIC_KEY`: `xYz9876...` (サーバーの公開鍵)
+- `WIREGUARD_ENDPOINT`: `your-server.com:51820`
+- `WIREGUARD_ALLOWED_IPS`: `10.0.0.0/24`
+
+### 4. SSH設定の強化（オプション）
 
 ```bash
 # /etc/ssh/sshd_config に追加
@@ -98,10 +116,11 @@ Match User github-runner
 
 1. WireGuard サーバーが起動していることを確認
 2. ファイアウォールで WireGuard ポートが開放されていることを確認
-3. `WIREGUARD_CONFIG` の設定が正しいことを確認
+3. 各 WireGuard secrets の設定が正しいことを確認
 
 ### SSH 接続が失敗する場合
 
 1. SSH サーバーが起動していることを確認
-2. SSH 鍵ペアが正しく設定されていることを確認
+2. SSH 鍵ペアが正しく設定されていることを確認（パスワードなしの公開鍵認証）
 3. VPN 経由で SSH ポートにアクセスできることを確認
+4. SSH ユーザーが正しく作成され、公開鍵が authorized_keys に追加されていることを確認

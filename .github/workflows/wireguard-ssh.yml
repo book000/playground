@@ -27,8 +27,19 @@ jobs:
           # Create WireGuard config directory
           sudo mkdir -p /etc/wireguard
           
-          # Create WireGuard configuration file from secrets
-          echo "${{ secrets.WIREGUARD_CONFIG }}" | sudo tee /etc/wireguard/wg0.conf > /dev/null
+          # Create WireGuard configuration file from individual secrets
+          sudo tee /etc/wireguard/wg0.conf > /dev/null <<EOF
+          [Interface]
+          PrivateKey = ${{ secrets.WIREGUARD_PRIVATE_KEY }}
+          Address = ${{ secrets.WIREGUARD_ADDRESS }}
+          DNS = ${{ secrets.WIREGUARD_DNS }}
+          
+          [Peer]
+          PublicKey = ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
+          Endpoint = ${{ secrets.WIREGUARD_ENDPOINT }}
+          AllowedIPs = ${{ secrets.WIREGUARD_ALLOWED_IPS }}
+          PersistentKeepalive = 25
+          EOF
           
           # Set proper permissions
           sudo chmod 600 /etc/wireguard/wg0.conf
