@@ -76,12 +76,11 @@ jobs:
           
           # Add SSH config entry for the hostname
           cat >> ~/.ssh/config <<EOF
-          Host ${{ secrets.HOME_SERVER_HOST }}
+          Host ${{ secrets.HOME_SERVER_HOSTNAME }}
             HostName ${{ secrets.HOME_SERVER_IP }}
-            User git
+            User ${{ secrets.HOME_SERVER_USER }}
             Port 22
-            IdentityFile ~/.ssh/id_rsa
-            StrictHostKeyChecking no
+            IdentityFile /tmp/id_rsa
           EOF
           chmod 600 ~/.ssh/config
 
@@ -92,8 +91,8 @@ jobs:
           chmod 700 ~/.ssh
           
           # Add SSH private key
-          echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > /tmp/id_rsa
+          chmod 600 /tmp/id_rsa
           
           # Add home server host key to known_hosts for secure connection
           echo "${{ secrets.HOME_SERVER_IP }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
@@ -107,7 +106,7 @@ jobs:
       - name: SSH to home server
         run: |
           # Execute command on home server via SSH through VPN
-          ssh ${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOST }} "${{ github.event.inputs.command }}"
+          ssh ${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOSTNAME }} "${{ github.event.inputs.command }}"
 
       - name: Cleanup
         if: always()
@@ -116,4 +115,4 @@ jobs:
           sudo wg-quick down wg0 || true
           
           # Remove SSH key
-          rm -f ~/.ssh/id_rsa
+          rm -f /tmp/id_rsa
