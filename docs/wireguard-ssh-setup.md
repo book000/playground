@@ -111,6 +111,8 @@ WireGuard の設定を各項目ごとに個別の secrets として設定：
 
 ### 4. SSH設定の強化（オプション）
 
+github-runner ユーザー専用のセキュリティ設定を追加することで、攻撃面を最小化できます：
+
 ```bash
 # /etc/ssh/sshd_config に追加
 Match User github-runner
@@ -120,6 +122,26 @@ Match User github-runner
     PermitTunnel no
     # ForceCommandは設定しない（コマンド実行を許可するため）
 ```
+
+#### 各設定項目の説明：
+
+- **AllowTcpForwarding no**: TCPポートフォワーディングを無効化
+  - 攻撃者がサーバーを踏み台にして他のサービスにアクセスすることを防止
+  - ネットワーク内の他のサービスへの不正アクセスリスクを軽減
+
+- **X11Forwarding no**: X11転送を無効化
+  - GUI アプリケーションの転送を禁止し、デスクトップ環境への不正アクセスを防止
+  - X11 プロトコルの脆弱性を回避
+
+- **AllowAgentForwarding no**: SSH エージェント転送を無効化
+  - SSH 秘密鍵の転送を禁止し、鍵の漏洩リスクを軽減
+  - 多段SSH接続での認証情報の伝播を防止
+
+- **PermitTunnel no**: SSH トンネリングを無効化
+  - VPN のような機能の使用を禁止し、ネットワーク境界の迂回を防止
+  - 管理されていないネットワーク経路の作成を阻止
+
+これらの設定により、github-runner ユーザーは最小限の権限でコマンド実行のみが可能となり、システム全体のセキュリティが向上します。
 
 ## 使用方法
 
