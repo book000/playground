@@ -1,16 +1,16 @@
-name: WireGuard VPN SSH Connection (using action)
+name: Example WireGuard SSH Usage
 
 on:
   workflow_dispatch:
     inputs:
       command:
-        description: 'Command to execute on home server'
+        description: 'Command to execute on remote server'
         required: false
-        default: 'hostname && whoami && pwd'
+        default: 'hostname && whoami && pwd && uptime'
         type: string
 
 jobs:
-  wireguard-ssh:
+  wireguard-ssh-example:
     runs-on: ubuntu-latest
     
     steps:
@@ -23,7 +23,7 @@ jobs:
           command: ${{ github.event.inputs.command }}
           wireguard-private-key: ${{ secrets.WIREGUARD_PRIVATE_KEY }}
           wireguard-address: ${{ secrets.WIREGUARD_ADDRESS }}
-          wireguard-dns: ${{ secrets.WIREGUARD_DNS }}
+          wireguard-dns: ${{ secrets.WIREGUARD_DNS || '1.1.1.1' }}
           wireguard-peer-public-key: ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
           wireguard-preshared-key: ${{ secrets.WIREGUARD_PRESHARED_KEY }}
           wireguard-endpoint: ${{ secrets.WIREGUARD_ENDPOINT }}
@@ -33,3 +33,4 @@ jobs:
           ssh-hostname: ${{ secrets.HOME_SERVER_HOSTNAME }}
           ssh-host-ip: ${{ secrets.HOME_SERVER_IP }}
           ssh-host-key: ${{ secrets.HOME_SERVER_HOST_KEY }}
+          ssh-port: '22'

@@ -1,0 +1,182 @@
+name: 'WireGuard SSH'
+description: 'Connect to a remote server via WireGuard VPN and execute SSH commands'
+author: 'book000'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  command:
+    description: 'Command to execute on the remote server'
+    required: false
+    default: 'hostname && whoami && pwd'
+  
+  # WireGuard Configuration
+  wireguard-private-key:
+    description: 'WireGuard client private key'
+    required: true
+  
+  wireguard-address:
+    description: 'WireGuard client VPN address (e.g., 10.0.0.2/24)'
+    required: true
+  
+  wireguard-dns:
+    description: 'DNS server address (e.g., 1.1.1.1)'
+    required: false
+    default: '1.1.1.1'
+  
+  wireguard-peer-public-key:
+    description: 'WireGuard server public key'
+    required: true
+  
+  wireguard-preshared-key:
+    description: 'WireGuard preshared key (optional security enhancement)'
+    required: false
+  
+  wireguard-endpoint:
+    description: 'WireGuard server endpoint (e.g., server.com:51820)'
+    required: true
+  
+  wireguard-allowed-ips:
+    description: 'Allowed IPs for WireGuard (e.g., 10.0.0.0/24)'
+    required: true
+  
+  # SSH Configuration
+  ssh-private-key:
+    description: 'SSH private key for authentication'
+    required: true
+  
+  ssh-user:
+    description: 'SSH username'
+    required: true
+  
+  ssh-hostname:
+    description: 'SSH hostname alias for connection'
+    required: true
+  
+  ssh-host-ip:
+    description: 'SSH server IP address within VPN'
+    required: true
+  
+  ssh-host-key:
+    description: 'SSH server host key for verification'
+    required: true
+  
+  ssh-port:
+    description: 'SSH port number'
+    required: false
+    default: '22'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install WireGuard
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y wireguard
+
+    - name: Setup WireGuard configuration
+      shell: bash
+      run: |
+        # Create WireGuard config directory
+        sudo mkdir -p /etc/wireguard
+        
+        # Create WireGuard configuration file
+        sudo tee /etc/wireguard/wg0.conf > /dev/null <<EOF
+        [Interface]
+        PrivateKey = ${{ inputs.wireguard-private-key }}
+        Address = ${{ inputs.wireguard-address }}
+        DNS = ${{ inputs.wireguard-dns }}
+        
+        [Peer]
+        PublicKey = ${{ inputs.wireguard-peer-public-key }}
+        EOF
+        
+        # Add PresharedKey if provided (optional security enhancement)
+        if [ -n "${{ inputs.wireguard-preshared-key }}" ]; then
+          echo "PresharedKey = ${{ inputs.wireguard-preshared-key }}" | sudo tee -a /etc/wireguard/wg0.conf > /dev/null
+        fi
+        
+        # Add remaining peer configuration
+        sudo tee -a /etc/wireguard/wg0.conf > /dev/null <<EOF
+        Endpoint = ${{ inputs.wireguard-endpoint }}
+        AllowedIPs = ${{ inputs.wireguard-allowed-ips }}
+        PersistentKeepalive = 25
+        EOF
+        
+        # Set proper permissions
+        sudo chmod 600 /etc/wireguard/wg0.conf
+        
+        # Enable IP forwarding (if needed)
+        echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p
+
+    - name: Start WireGuard VPN
+      shell: bash
+      run: |
+        # Start WireGuard interface
+        sudo wg-quick up wg0
+        
+        # Show WireGuard status
+        sudo wg show
+        
+        # Show IP configuration
+        ip addr show wg0
+
+    - name: Setup SSH Configuration
+      shell: bash
+      run: |
+        # Set up SSH config for the hostname
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Add SSH config entry for the hostname
+        cat >> ~/.ssh/config <<EOF
+        Host ${{ inputs.ssh-hostname }}
+          HostName ${{ inputs.ssh-host-ip }}
+          User ${{ inputs.ssh-user }}
+          Port ${{ inputs.ssh-port }}
+          IdentityFile /tmp/id_rsa
+        EOF
+        chmod 600 ~/.ssh/config
+
+    - name: Setup SSH key
+      shell: bash
+      run: |
+        # Create SSH directory
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        
+        # Add SSH private key
+        echo "${{ inputs.ssh-private-key }}" > /tmp/id_rsa
+        chmod 600 /tmp/id_rsa
+        
+        # Add server host key to known_hosts for secure connection
+        echo "${{ inputs.ssh-host-ip }} ${{ inputs.ssh-host-key }}" >> ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts
+
+    - name: Test VPN connectivity
+      shell: bash
+      run: |
+        # Test ping to server through VPN
+        ping -c 3 ${{ inputs.ssh-host-ip }}
+
+    - name: SSH to remote server
+      shell: bash
+      run: |
+        # Execute command on remote server via SSH through VPN
+        ssh ${{ inputs.ssh-hostname }} "${{ inputs.command }}"
+
+    - name: Cleanup
+      shell: bash
+      if: always()
+      run: |
+        # Stop WireGuard interface
+        sudo wg-quick down wg0 || true
+        
+        # Remove SSH key
+        rm -f /tmp/id_rsa
+        
+        # Remove SSH config
+        rm -f ~/.ssh/config
