@@ -1,0 +1,93 @@
+name: WireGuard VPN SSH Connection
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Command to execute on home server'
+        required: false
+        default: 'hostname && whoami && pwd'
+        type: string
+
+jobs:
+  wireguard-ssh:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install WireGuard
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wireguard
+
+      - name: Setup WireGuard configuration
+        run: |
+          # Create WireGuard config directory
+          sudo mkdir -p /etc/wireguard
+          
+          # Create WireGuard configuration file from individual secrets
+          sudo tee /etc/wireguard/wg0.conf > /dev/null <<EOF
+          [Interface]
+          PrivateKey = ${{ secrets.WIREGUARD_PRIVATE_KEY }}
+          Address = ${{ secrets.WIREGUARD_ADDRESS }}
+          DNS = ${{ secrets.WIREGUARD_DNS }}
+          
+          [Peer]
+          PublicKey = ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
+          Endpoint = ${{ secrets.WIREGUARD_ENDPOINT }}
+          AllowedIPs = ${{ secrets.WIREGUARD_ALLOWED_IPS }}
+          PersistentKeepalive = 25
+          EOF
+          
+          # Set proper permissions
+          sudo chmod 600 /etc/wireguard/wg0.conf
+          
+          # Enable IP forwarding (if needed)
+          echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
+
+      - name: Start WireGuard VPN
+        run: |
+          # Start WireGuard interface
+          sudo wg-quick up wg0
+          
+          # Show WireGuard status
+          sudo wg show
+          
+          # Show IP configuration
+          ip addr show wg0
+
+      - name: Setup SSH key
+        run: |
+          # Create SSH directory
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Add SSH private key
+          echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Add home server host key to known_hosts for secure connection
+          echo "${{ secrets.HOME_SERVER_HOST }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Test VPN connectivity
+        run: |
+          # Test ping to home server through VPN
+          ping -c 3 ${{ secrets.HOME_SERVER_HOST }}
+
+      - name: SSH to home server
+        run: |
+          # Execute command on home server via SSH through VPN
+          ssh ${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOST }} "${{ github.event.inputs.command }}"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Stop WireGuard interface
+          sudo wg-quick down wg0 || true
+          
+          # Remove SSH key
+          rm -f ~/.ssh/id_rsa
