@@ -69,11 +69,9 @@ jobs:
           echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          # Add home server to known hosts (disable host key checking for automation)
-          echo "Host ${{ secrets.HOME_SERVER_HOST }}" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
+          # Add home server host key to known_hosts for secure connection
+          echo "${{ secrets.HOME_SERVER_HOST }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
       - name: Test VPN connectivity
         run: |
