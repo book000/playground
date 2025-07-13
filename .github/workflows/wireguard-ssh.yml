@@ -68,6 +68,22 @@ jobs:
           # Show IP configuration
           ip addr show wg0
 
+      - name: Setup SSH Configuration
+        run: |
+          # Set up SSH config for the hostname
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Add SSH config entry for the hostname
+          cat >> ~/.ssh/config <<EOF
+          Host ${{ secrets.HOME_SERVER_HOSTNAME }}
+            HostName ${{ secrets.HOME_SERVER_IP }}
+            User ${{ secrets.HOME_SERVER_USER }}
+            Port 22
+            IdentityFile /tmp/id_rsa
+          EOF
+          chmod 600 ~/.ssh/config
+
       - name: Setup SSH key
         run: |
           # Create SSH directory
@@ -75,22 +91,22 @@ jobs:
           chmod 700 ~/.ssh
           
           # Add SSH private key
-          echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          echo "${{ secrets.HOME_SERVER_SSH_KEY }}" > /tmp/id_rsa
+          chmod 600 /tmp/id_rsa
           
           # Add home server host key to known_hosts for secure connection
-          echo "${{ secrets.HOME_SERVER_HOST }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.HOME_SERVER_IP }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Test VPN connectivity
         run: |
           # Test ping to home server through VPN
-          ping -c 3 ${{ secrets.HOME_SERVER_HOST }}
+          ping -c 3 ${{ secrets.HOME_SERVER_IP }}
 
       - name: SSH to home server
         run: |
           # Execute command on home server via SSH through VPN
-          ssh ${{ secrets.HOME_SERVER_USER }}@${{ secrets.HOME_SERVER_HOST }} "${{ github.event.inputs.command }}"
+          ssh ${{ secrets.HOME_SERVER_HOSTNAME }} "${{ github.event.inputs.command }}"
 
       - name: Cleanup
         if: always()
@@ -99,4 +115,7 @@ jobs:
           sudo wg-quick down wg0 || true
           
           # Remove SSH key
-          rm -f ~/.ssh/id_rsa
+          rm -f /tmp/id_rsa
+          
+          # Remove SSH config
+          rm -f ~/.ssh/config

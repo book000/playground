@@ -39,12 +39,29 @@ SSH 接続用の秘密鍵（RSA または Ed25519）
 #### `HOME_SERVER_USER`
 SSH 接続用のユーザー名（sudo 権限なし）
 
-#### `HOME_SERVER_HOST`
-VPN 内での自宅サーバーの IP アドレス
+#### `HOME_SERVER_HOSTNAME`
+SSH 接続時のホスト名エイリアス（SSH config の Host エントリ名）
+
+#### `HOME_SERVER_IP`
+VPN 内での自宅サーバーの IP アドレス（SSH config の HostName で使用）
 
 #### `HOME_SERVER_HOST_KEY`
 SSH ホストキー（セキュリティのため必須）
 ※ サーバーで `ssh-keyscan -t rsa,ed25519 <サーバーのIP>` で取得可能
+
+### SSH設定の仕組み
+
+ワークフローは以下のSSH設定を自動生成します：
+
+```
+Host <HOME_SERVER_HOSTNAME>
+  HostName <HOME_SERVER_IP>
+  User <HOME_SERVER_USER>
+  Port 22
+  IdentityFile /tmp/id_rsa
+```
+
+これにより、`ssh <HOME_SERVER_HOSTNAME>` コマンドで指定したユーザーとIPアドレスに自動接続されます。
 
 ## 自宅サーバーのセットアップ
 
@@ -130,7 +147,8 @@ WireGuard の設定を各項目ごとに個別の secrets として設定：
 - `WIREGUARD_ALLOWED_IPS`: `10.0.0.0/24`
 - `HOME_SERVER_SSH_KEY`: `-----BEGIN OPENSSH PRIVATE KEY-----...` (SSH秘密鍵)
 - `HOME_SERVER_USER`: `github-runner`
-- `HOME_SERVER_HOST`: `10.0.0.1`
+- `HOME_SERVER_HOSTNAME`: `home-server` (SSH接続時のホスト名エイリアス)
+- `HOME_SERVER_IP`: `10.0.0.1` (VPN内での実際のIPアドレス)
 - `HOME_SERVER_HOST_KEY`: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...` (ホストキー)
 
 ### 4. SSH設定の強化（オプション）
@@ -178,8 +196,10 @@ Match User github-runner
 - SSH ユーザーには sudo 権限を付与しない
 - WireGuard の設定で必要最小限の IP レンジのみ許可
 - SSH 接続は VPN 経由のみ許可
-- SSH ホストキー検証を有効にして中間者攻撃を防止
+- SSH ホストキー検証を有効にして中間者攻撃を防止（StrictHostKeyChecking有効）
 - 秘密鍵とパスワードは GitHub Secrets で安全に管理
+- SSH秘密鍵は `/tmp` ディレクトリに一時的に保存し、実行後に自動削除
+- SSH設定ファイルも実行後に自動削除
 - 定期的な鍵のローテーション推奨
 
 ## トラブルシューティング
@@ -197,6 +217,9 @@ Match User github-runner
 3. VPN 経由で SSH ポートにアクセスできることを確認
 4. SSH ユーザーが正しく作成され、公開鍵が authorized_keys に追加されていることを確認
 5. ホストキーが正しく設定されていることを確認（`ssh-keyscan` で再取得して比較）
+6. `HOME_SERVER_HOSTNAME` と `HOME_SERVER_IP` が正しく設定されていることを確認
+   - `HOME_SERVER_HOSTNAME`: SSH接続時のエイリアス名（任意の名前）
+   - `HOME_SERVER_IP`: VPN内での実際のサーバーIPアドレス
 
 ### ホストキー検証エラーが発生する場合
 
