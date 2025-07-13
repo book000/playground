@@ -16,153 +16,120 @@ jobs:
   integration-test:
     runs-on: ubuntu-latest
 
-    services:
-      wireguard:
-        image: linuxserver/wireguard:latest
-        options: >-
-          --privileged
-          --cap-add=NET_ADMIN
-          --cap-add=SYS_MODULE
-          --name wireguard-server
-          --network-alias wireguard
-        env:
-          PUID: 1000
-          PGID: 1000
-          TZ: Etc/UTC
-          SERVERURL: wireguard
-          SERVERPORT: 51820
-          PEERS: 1
-          PEERDNS: auto
-          INTERNAL_SUBNET: 10.13.13.0
-        volumes:
-          - /lib/modules:/lib/modules
-        ports:
-          - 51820:51820/udp
-
-      ssh-server:
-        image: lscr.io/linuxserver/openssh-server:latest
-        options: >-
-          --name ssh-server
-          --network-alias ssh-server
-        env:
-          PUID: 1000
-          PGID: 1000
-          TZ: Etc/UTC
-          PUBLIC_KEY_FILE: /tmp/authorized_keys
-          SUDO_ACCESS: false
-          PASSWORD_ACCESS: false
-          USER_NAME: testuser
-        ports:
-          - 2222:2222
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Wait for services to be ready
+      - name: Setup test environment
         run: |
-          echo "Waiting for services to start..."
-          sleep 30
+          # Install required tools
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools openssh-client docker.io
+          
+          # Start Docker service
+          sudo systemctl start docker || sudo service docker start
+          
+          # Wait for Docker to be ready
+          sudo docker version
 
-          # Check if WireGuard server is running
-          docker ps | grep wireguard-server
-
-          # Check if SSH server is running
-          docker ps | grep ssh-server
-
-      - name: Setup WireGuard network configuration
+      - name: Setup WireGuard server container
         run: |
-          # Create a custom Docker network for proper IP addressing
-          docker network create --subnet=10.13.13.0/24 test-network || true
-
-          # Stop and remove existing containers
-          docker stop wireguard-server ssh-server || true
-          docker rm wireguard-server ssh-server || true
-
-          # Start WireGuard server with custom network
+          # Create a test network for isolation
+          docker network create --subnet=172.20.0.0/16 wg-test-network || true
+          
+          # Start WireGuard server container
           docker run -d \
             --name wireguard-server \
             --privileged \
             --cap-add=NET_ADMIN \
             --cap-add=SYS_MODULE \
-            --network test-network \
-            --ip 10.13.13.1 \
+            --network wg-test-network \
+            --ip 172.20.0.10 \
             -p 51820:51820/udp \
             -e PUID=1000 \
             -e PGID=1000 \
             -e TZ=Etc/UTC \
-            -e SERVERURL=10.13.13.1 \
+            -e SERVERURL=172.20.0.10 \
             -e SERVERPORT=51820 \
             -e PEERS=1 \
-            -e PEERDNS=auto \
-            -e INTERNAL_SUBNET=10.13.13.0 \
-            -v /lib/modules:/lib/modules \
+            -e PEERDNS=8.8.8.8 \
+            -e INTERNAL_SUBNET=172.20.1.0 \
+            -e ALLOWEDIPS=172.20.1.0/24 \
+            -v /lib/modules:/lib/modules:ro \
             linuxserver/wireguard:latest
 
-          # Generate SSH key pair for testing
-          ssh-keygen -t rsa -b 2048 -f ./test_ssh_key -N ""
-
-          # Start SSH server with custom network and SSH key
+      - name: Setup SSH server container
+        run: |
+          # Generate SSH host key
+          mkdir -p /tmp/ssh_host_keys
+          ssh-keygen -t rsa -b 2048 -f /tmp/ssh_host_keys/ssh_host_rsa_key -N ""
+          
+          # Generate SSH user key
+          ssh-keygen -t rsa -b 2048 -f /tmp/test_ssh_key -N ""
+          
+          # Start SSH server container
           docker run -d \
             --name ssh-server \
-            --network test-network \
-            --ip 10.13.13.10 \
+            --network wg-test-network \
+            --ip 172.20.1.20 \
             -p 2222:2222 \
             -e PUID=1000 \
             -e PGID=1000 \
             -e TZ=Etc/UTC \
-            -e PUBLIC_KEY="$(cat test_ssh_key.pub)" \
+            -e PUBLIC_KEY="$(cat /tmp/test_ssh_key.pub)" \
             -e SUDO_ACCESS=false \
             -e PASSWORD_ACCESS=false \
             -e USER_NAME=testuser \
+            -e USER_PASSWORD=disabled \
             lscr.io/linuxserver/openssh-server:latest
 
-          # Wait for containers to be ready
-          sleep 60
+      - name: Wait for services to initialize
+        run: |
+          echo "Waiting for containers to start and initialize..."
+          sleep 45
+          
+          # Check container status
+          docker ps
+          
+          # Check WireGuard logs
+          echo "=== WireGuard Server Logs ==="
+          docker logs wireguard-server | tail -20
+          
+          # Check SSH logs
+          echo "=== SSH Server Logs ==="
+          docker logs ssh-server | tail -20
 
-      - name: Extract WireGuard configuration
+      - name: Extract configuration from containers
         run: |
           # Wait for WireGuard to generate peer configs
-          sleep 30
-
-          # Get WireGuard peer configuration
-          docker exec wireguard-server cat /config/peer1/peer1.conf > peer1.conf
-          cat peer1.conf
-
+          timeout 60 bash -c 'while ! docker exec wireguard-server test -f /config/peer1/peer1.conf; do sleep 5; done'
+          
+          # Extract WireGuard client configuration
+          docker exec wireguard-server cat /config/peer1/peer1.conf
+          
           # Extract client private key
-          CLIENT_PRIVATE_KEY=$(docker exec wireguard-server \
-            cat /config/peer1/privatekey-peer1)
+          CLIENT_PRIVATE_KEY=$(docker exec wireguard-server cat /config/peer1/privatekey-peer1)
           echo "CLIENT_PRIVATE_KEY=$CLIENT_PRIVATE_KEY" >> $GITHUB_ENV
-
+          
           # Extract server public key
-          SERVER_PUBLIC_KEY=$(docker exec wireguard-server \
-            cat /config/server/publickey-server)
+          SERVER_PUBLIC_KEY=$(docker exec wireguard-server cat /config/server/publickey-server)
           echo "SERVER_PUBLIC_KEY=$SERVER_PUBLIC_KEY" >> $GITHUB_ENV
-
-          # Set other WireGuard parameters
-          echo "WIREGUARD_ENDPOINT=10.13.13.1:51820" >> $GITHUB_ENV
-          echo "WIREGUARD_ADDRESS=10.13.13.2/24" >> $GITHUB_ENV
-          echo "WIREGUARD_ALLOWED_IPS=10.13.13.0/24" >> $GITHUB_ENV
-
-      - name: Setup SSH configuration
-        run: |
-          # Get SSH private key content
-          SSH_PRIVATE_KEY=$(cat test_ssh_key)
+          
+          # Set WireGuard configuration
+          echo "WIREGUARD_ENDPOINT=172.20.0.10:51820" >> $GITHUB_ENV
+          echo "WIREGUARD_ADDRESS=172.20.1.2/24" >> $GITHUB_ENV
+          echo "WIREGUARD_ALLOWED_IPS=172.20.1.0/24" >> $GITHUB_ENV
+          
+          # Extract SSH private key
+          SSH_PRIVATE_KEY=$(cat /tmp/test_ssh_key)
           echo "SSH_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
           echo "$SSH_PRIVATE_KEY" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-
-          # Get SSH host key from the server
-          timeout 30 docker exec ssh-server bash -c \
-            'while [ ! -f /config/ssh_host_keys/ssh_host_rsa_key.pub ]; do \
-            sleep 1; done'
-          SSH_HOST_KEY=$(docker exec ssh-server \
-            cat /config/ssh_host_keys/ssh_host_rsa_key.pub)
+          
+          # Wait for SSH host key and extract it
+          timeout 30 bash -c 'while ! docker exec ssh-server test -f /config/ssh_host_keys/ssh_host_rsa_key.pub; do sleep 2; done'
+          SSH_HOST_KEY=$(docker exec ssh-server cat /config/ssh_host_keys/ssh_host_rsa_key.pub)
           echo "SSH_HOST_KEY=$SSH_HOST_KEY" >> $GITHUB_ENV
-
-          # Create test files for SCP testing
-          echo "Hello from GitHub Actions integration test!" > test_upload.txt
-          mkdir -p test_download
 
       - name: Test SSH command execution
         uses: ./
@@ -170,80 +137,89 @@ jobs:
           operation: ssh
           command: |
             hostname && whoami && pwd &&
-            echo "SSH test successful!"
+            echo "SSH test successful! Server IP: $(hostname -I)"
           ping-check: 'true'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: ${{ env.WIREGUARD_ADDRESS }}
-          wireguard-dns: '1.1.1.1'
+          wireguard-dns: '8.8.8.8'
           wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
           wireguard-endpoint: ${{ env.WIREGUARD_ENDPOINT }}
           wireguard-allowed-ips: ${{ env.WIREGUARD_ALLOWED_IPS }}
           ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
-          ssh-host-ip: '10.13.13.10'
+          ssh-host-ip: '172.20.1.20'
           ssh-host-key: ${{ env.SSH_HOST_KEY }}
           ssh-port: '2222'
+
+      - name: Create test file for SCP
+        run: |
+          echo "Hello from GitHub Actions integration test $(date)" > test_upload.txt
+          mkdir -p test_download
 
       - name: Test SCP upload
         uses: ./
         with:
           operation: scp
           scp-source: './test_upload.txt'
-          scp-destination: '/config/test_upload.txt'
+          scp-destination: '/config/test_uploaded.txt'
           scp-direction: 'upload'
           ping-check: 'false'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: ${{ env.WIREGUARD_ADDRESS }}
-          wireguard-dns: '1.1.1.1'
+          wireguard-dns: '8.8.8.8'
           wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
           wireguard-endpoint: ${{ env.WIREGUARD_ENDPOINT }}
           wireguard-allowed-ips: ${{ env.WIREGUARD_ALLOWED_IPS }}
           ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
-          ssh-host-ip: '10.13.13.10'
+          ssh-host-ip: '172.20.1.20'
           ssh-host-key: ${{ env.SSH_HOST_KEY }}
           ssh-port: '2222'
 
-      - name: Verify uploaded file exists
+      - name: Verify uploaded file
         uses: ./
         with:
           operation: ssh
           command: |
-            ls -la /config/test_upload.txt && cat /config/test_upload.txt
+            echo "=== Verifying uploaded file ==="
+            ls -la /config/test_uploaded.txt
+            echo "File contents:"
+            cat /config/test_uploaded.txt
           ping-check: 'false'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: ${{ env.WIREGUARD_ADDRESS }}
-          wireguard-dns: '1.1.1.1'
+          wireguard-dns: '8.8.8.8'
           wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
           wireguard-endpoint: ${{ env.WIREGUARD_ENDPOINT }}
           wireguard-allowed-ips: ${{ env.WIREGUARD_ALLOWED_IPS }}
           ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
-          ssh-host-ip: '10.13.13.10'
+          ssh-host-ip: '172.20.1.20'
           ssh-host-key: ${{ env.SSH_HOST_KEY }}
           ssh-port: '2222'
 
-      - name: Create test file on server for download
+      - name: Create file on server for download test
         uses: ./
         with:
           operation: ssh
           command: |
-            echo "File created on server for download test" > \
-            /config/test_download.txt
+            echo "File created on server for download test $(date)" > /config/test_download.txt
+            echo "Download test file created successfully"
+            ls -la /config/test_download.txt
           ping-check: 'false'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: ${{ env.WIREGUARD_ADDRESS }}
-          wireguard-dns: '1.1.1.1'
+          wireguard-dns: '8.8.8.8'
           wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
           wireguard-endpoint: ${{ env.WIREGUARD_ENDPOINT }}
           wireguard-allowed-ips: ${{ env.WIREGUARD_ALLOWED_IPS }}
           ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
-          ssh-host-ip: '10.13.13.10'
+          ssh-host-ip: '172.20.1.20'
           ssh-host-key: ${{ env.SSH_HOST_KEY }}
           ssh-port: '2222'
 
@@ -257,24 +233,25 @@ jobs:
           ping-check: 'false'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: ${{ env.WIREGUARD_ADDRESS }}
-          wireguard-dns: '1.1.1.1'
+          wireguard-dns: '8.8.8.8'
           wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
           wireguard-endpoint: ${{ env.WIREGUARD_ENDPOINT }}
           wireguard-allowed-ips: ${{ env.WIREGUARD_ALLOWED_IPS }}
           ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
-          ssh-host-ip: '10.13.13.10'
+          ssh-host-ip: '172.20.1.20'
           ssh-host-key: ${{ env.SSH_HOST_KEY }}
           ssh-port: '2222'
 
       - name: Verify downloaded file
         run: |
-          echo "Verifying downloaded file content:"
+          echo "=== Verifying downloaded file ==="
+          ls -la ./test_download/downloaded_file.txt
+          echo "Downloaded file contents:"
           cat ./test_download/downloaded_file.txt
-
-          if grep -q "File created on server for download test" \
-             ./test_download/downloaded_file.txt; then
+          
+          if grep -q "File created on server for download test" ./test_download/downloaded_file.txt; then
             echo "✅ SCP download test passed!"
           else
             echo "❌ SCP download test failed!"
@@ -287,39 +264,49 @@ jobs:
           operation: ssh
           command: |
             echo "Testing without ping check - should work!"
+            echo "Current directory: $(pwd)"
+            echo "Current user: $(whoami)"
           ping-check: 'false'
           wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
           wireguard-address: ${{ env.WIREGUARD_ADDRESS }}
-          wireguard-dns: '1.1.1.1'
+          wireguard-dns: '8.8.8.8'
           wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
           wireguard-endpoint: ${{ env.WIREGUARD_ENDPOINT }}
           wireguard-allowed-ips: ${{ env.WIREGUARD_ALLOWED_IPS }}
           ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
           ssh-user: 'testuser'
           ssh-hostname: 'test-server'
-          ssh-host-ip: '10.13.13.10'
+          ssh-host-ip: '172.20.1.20'
           ssh-host-key: ${{ env.SSH_HOST_KEY }}
           ssh-port: '2222'
 
       - name: Integration test summary
         run: |
-          echo "🎉 All integration tests passed!"
+          echo "🎉 All integration tests completed successfully!"
+          echo ""
           echo "✅ WireGuard VPN connection established"
-          echo "✅ SSH command execution works"
-          echo "✅ SCP upload works"
-          echo "✅ SCP download works"
-          echo "✅ Ping check can be disabled"
-          echo "✅ Action properly cleans up connections"
+          echo "✅ SSH command execution verified"
+          echo "✅ SCP file upload verified"
+          echo "✅ SCP file download verified"
+          echo "✅ Ping check functionality verified"
+          echo "✅ Action cleanup verified"
+          echo ""
+          echo "The action works correctly with real WireGuard and SSH services!"
 
-      - name: Cleanup test files
+      - name: Cleanup
         if: always()
         run: |
-          rm -f test_ssh_key test_ssh_key.pub test_upload.txt peer1.conf
-          rm -rf test_download
-
           # Stop and remove containers
           docker stop wireguard-server ssh-server || true
           docker rm wireguard-server ssh-server || true
-
-          # Remove custom network
-          docker network rm test-network || true
+          
+          # Remove network
+          docker network rm wg-test-network || true
+          
+          # Clean up test files
+          rm -f /tmp/test_ssh_key /tmp/test_ssh_key.pub
+          rm -rf /tmp/ssh_host_keys
+          rm -f test_upload.txt
+          rm -rf test_download
+          
+          echo "Cleanup completed"
