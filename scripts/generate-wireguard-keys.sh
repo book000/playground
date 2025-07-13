@@ -43,21 +43,31 @@ echo "Server Public Key (for WIREGUARD_CONFIG secret):"
 echo "$SERVER_PUBLIC_KEY"
 echo
 
+echo "Generating PresharedKey for enhanced security..."
+
+# Generate PresharedKey
+PRESHARED_KEY=$(wg genpsk)
+
+echo "PresharedKey (for WIREGUARD_PRESHARED_KEY secret, optional):"
+echo "$PRESHARED_KEY"
+echo
+
 echo "================================"
 echo "Next steps:"
-echo "1. Use the Client Private Key in your WIREGUARD_CONFIG secret"
+echo "1. Use the Client Private Key in your WIREGUARD_PRIVATE_KEY secret"
 echo "2. Add the Client Public Key to your server's WireGuard configuration"
-echo "3. Use the Server Public Key in your WIREGUARD_CONFIG secret"
-echo "4. Configure your server with the Server Private Key"
+echo "3. Use the Server Public Key in your WIREGUARD_PEER_PUBLIC_KEY secret"
+echo "4. (Optional) Use the PresharedKey in your WIREGUARD_PRESHARED_KEY secret for enhanced security"
+echo "5. Configure your server with the Server Private Key"
+echo "6. (Optional) Add the same PresharedKey to your server's peer configuration"
 echo
-echo "Example WIREGUARD_CONFIG for GitHub secret:"
-echo "[Interface]"
-echo "PrivateKey = $CLIENT_PRIVATE_KEY"
-echo "Address = 10.0.0.2/24"
-echo "DNS = 8.8.8.8"
+echo "Example GitHub secrets configuration:"
+echo "WIREGUARD_PRIVATE_KEY = $CLIENT_PRIVATE_KEY"
+echo "WIREGUARD_PEER_PUBLIC_KEY = $SERVER_PUBLIC_KEY"
+echo "WIREGUARD_PRESHARED_KEY = $PRESHARED_KEY"
 echo ""
+echo "Example server config for your client peer:"
 echo "[Peer]"
-echo "PublicKey = $SERVER_PUBLIC_KEY"
-echo "Endpoint = YOUR_SERVER_IP:51820"
-echo "AllowedIPs = 10.0.0.0/24"
-echo "PersistentKeepalive = 25"
+echo "PublicKey = $CLIENT_PUBLIC_KEY"
+echo "PresharedKey = $PRESHARED_KEY"
+echo "AllowedIPs = 10.0.0.2/32"
