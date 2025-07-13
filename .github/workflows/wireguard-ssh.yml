@@ -68,6 +68,26 @@ jobs:
           # Show IP configuration
           ip addr show wg0
 
+      - name: Setup Git SSH Configuration
+        run: |
+          # Configure git to use SSH for the hostname from secrets
+          git config --global url."ssh://git@${{ secrets.HOME_SERVER_HOST }}/".insteadOf "https://${{ secrets.HOME_SERVER_HOST }}/"
+          
+          # Set up SSH config for the hostname
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          
+          # Add SSH config entry for the hostname
+          cat >> ~/.ssh/config <<EOF
+          Host ${{ secrets.HOME_SERVER_HOST }}
+            HostName ${{ secrets.HOME_SERVER_HOST }}
+            User git
+            Port 22
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 ~/.ssh/config
+
       - name: Setup SSH key
         run: |
           # Create SSH directory
