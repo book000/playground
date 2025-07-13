@@ -118,7 +118,7 @@ Match User github-runner
     X11Forwarding no
     AllowAgentForwarding no
     PermitTunnel no
-    ForceCommand echo "GitHub Actions SSH connection established"
+    # ForceCommandは設定しない（コマンド実行を許可するため）
 ```
 
 ## 使用方法
