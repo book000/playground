@@ -68,11 +68,8 @@ jobs:
           # Show IP configuration
           ip addr show wg0
 
-      - name: Setup Git SSH Configuration
+      - name: Setup SSH Configuration
         run: |
-          # Configure git to use SSH for the hostname from secrets
-          git config --global url."ssh://git@${{ secrets.HOME_SERVER_HOST }}/".insteadOf "https://${{ secrets.HOME_SERVER_HOST }}/"
-          
           # Set up SSH config for the hostname
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -80,7 +77,7 @@ jobs:
           # Add SSH config entry for the hostname
           cat >> ~/.ssh/config <<EOF
           Host ${{ secrets.HOME_SERVER_HOST }}
-            HostName ${{ secrets.HOME_SERVER_HOST }}
+            HostName ${{ secrets.HOME_SERVER_IP }}
             User git
             Port 22
             IdentityFile ~/.ssh/id_rsa
@@ -99,13 +96,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           
           # Add home server host key to known_hosts for secure connection
-          echo "${{ secrets.HOME_SERVER_HOST }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
+          echo "${{ secrets.HOME_SERVER_IP }} ${{ secrets.HOME_SERVER_HOST_KEY }}" >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
       - name: Test VPN connectivity
         run: |
           # Test ping to home server through VPN
-          ping -c 3 ${{ secrets.HOME_SERVER_HOST }}
+          ping -c 3 ${{ secrets.HOME_SERVER_IP }}
 
       - name: SSH to home server
         run: |
