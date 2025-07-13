@@ -36,6 +36,15 @@ jobs:
           
           [Peer]
           PublicKey = ${{ secrets.WIREGUARD_PEER_PUBLIC_KEY }}
+          EOF
+          
+          # Add PresharedKey if provided (optional security enhancement)
+          if [ -n "${{ secrets.WIREGUARD_PRESHARED_KEY }}" ]; then
+            echo "PresharedKey = ${{ secrets.WIREGUARD_PRESHARED_KEY }}" | sudo tee -a /etc/wireguard/wg0.conf > /dev/null
+          fi
+          
+          # Add remaining peer configuration
+          sudo tee -a /etc/wireguard/wg0.conf > /dev/null <<EOF
           Endpoint = ${{ secrets.WIREGUARD_ENDPOINT }}
           AllowedIPs = ${{ secrets.WIREGUARD_ALLOWED_IPS }}
           PersistentKeepalive = 25

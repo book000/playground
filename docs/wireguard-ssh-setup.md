@@ -20,6 +20,10 @@ DNS サーバーアドレス（例: `1.1.1.1`）
 #### `WIREGUARD_PEER_PUBLIC_KEY`
 WireGuard サーバーの公開鍵
 
+#### `WIREGUARD_PRESHARED_KEY` (オプション)
+事前共有鍵（PresharedKey）
+※ セキュリティ強化のためのオプション設定。量子コンピューター攻撃に対する追加の保護を提供
+
 #### `WIREGUARD_ENDPOINT`
 サーバーのパブリック IP とポート（例: `your-server.com:51820`）
 
@@ -74,7 +78,26 @@ ListenPort = <ポート番号>
 [Peer]
 # GitHub Actions クライアント
 PublicKey = <クライアントの公開鍵>
+PresharedKey = <事前共有鍵（オプション）>
 AllowedIPs = <クライアントのVPNアドレス>/32
+```
+
+#### PresharedKey について
+
+PresharedKey（事前共有鍵）は WireGuard のオプション機能で、以下のメリットがあります：
+
+- **量子コンピューター攻撃への耐性**: 将来の量子コンピューターによる攻撃から保護
+- **追加の暗号化層**: 既存の公開鍵暗号化に加えて対称鍵暗号化を使用
+- **Forward Secrecy の強化**: より強固な前方秘匿性を提供
+
+PresharedKey を生成するには：
+```bash
+wg genpsk
+```
+
+または、提供されているスクリプトを使用：
+```bash
+./scripts/generate-wireguard-keys.sh
 ```
 
 ### 3. SSH ホストキーの取得
@@ -102,6 +125,7 @@ WireGuard の設定を各項目ごとに個別の secrets として設定：
 - `WIREGUARD_ADDRESS`: `10.0.0.2/24`
 - `WIREGUARD_DNS`: `1.1.1.1`
 - `WIREGUARD_PEER_PUBLIC_KEY`: `xYz9876...` (サーバーの公開鍵)
+- `WIREGUARD_PRESHARED_KEY`: `pQr3456...` (事前共有鍵、オプション)
 - `WIREGUARD_ENDPOINT`: `your-server.com:51820`
 - `WIREGUARD_ALLOWED_IPS`: `10.0.0.0/24`
 - `HOME_SERVER_SSH_KEY`: `-----BEGIN OPENSSH PRIVATE KEY-----...` (SSH秘密鍵)
