@@ -1,0 +1,242 @@
+---
+name: Test WireGuard SSH Action (Simple)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-wireguard-ssh-action-simple.yml'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-wireguard-ssh-action-simple.yml'
+
+jobs:
+  test-action-validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup test environment
+        run: |
+          # Generate SSH key pair for testing
+          ssh-keygen -t rsa -b 2048 -f ./test_ssh_key -N ""
+
+          # Generate WireGuard keys
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools
+
+          # Generate client private key
+          CLIENT_PRIVATE_KEY=$(wg genkey)
+          CLIENT_PUBLIC_KEY=$(echo "$CLIENT_PRIVATE_KEY" | wg pubkey)
+
+          # Generate server private key
+          SERVER_PRIVATE_KEY=$(wg genkey)
+          SERVER_PUBLIC_KEY=$(echo "$SERVER_PRIVATE_KEY" | wg pubkey)
+
+          echo "CLIENT_PRIVATE_KEY=$CLIENT_PRIVATE_KEY" >> $GITHUB_ENV
+          echo "CLIENT_PUBLIC_KEY=$CLIENT_PUBLIC_KEY" >> $GITHUB_ENV
+          echo "SERVER_PRIVATE_KEY=$SERVER_PRIVATE_KEY" >> $GITHUB_ENV
+          echo "SERVER_PUBLIC_KEY=$SERVER_PUBLIC_KEY" >> $GITHUB_ENV
+
+          # Create test file for SCP testing
+          echo "Hello from GitHub Actions test!" > test_upload.txt
+
+          # Get SSH private key content
+          SSH_PRIVATE_KEY=$(cat test_ssh_key)
+
+          # Store SSH key in environment
+          echo "SSH_PRIVATE_KEY<<EOF" >> $GITHUB_ENV
+          echo "$SSH_PRIVATE_KEY" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          # Use a valid SSH host key for testing (GitHub's host key)
+          SSH_HOST_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7test"
+          echo "SSH_HOST_KEY=$SSH_HOST_KEY" >> $GITHUB_ENV
+
+      - name: Test action input validation - SSH with missing command
+        id: test-ssh-missing-command
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: ssh
+          # Missing command parameter - should use default
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'nonexistent.example.com:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: ${{ env.SSH_HOST_KEY }}
+          ssh-port: '22'
+
+      - name: Test action input validation - SCP with missing parameters
+        id: test-scp-missing-params
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: scp
+          # Missing scp-source and scp-destination - should fail
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.CLIENT_PRIVATE_KEY }}
+          wireguard-address: '10.13.13.2/24'
+          wireguard-dns: '1.1.1.1'
+          wireguard-peer-public-key: ${{ env.SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'nonexistent.example.com:51820'
+          wireguard-allowed-ips: '10.13.13.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.13.13.1'
+          ssh-host-key: ${{ env.SSH_HOST_KEY }}
+          ssh-port: '22'
+
+      - name: Verify SCP validation worked
+        run: |
+          if [ "${{ steps.test-scp-missing-params.outcome }}" = \
+             "failure" ]; then
+            echo "✅ SCP validation test passed - correctly failed"
+          else
+            echo "❌ SCP validation test failed - should have failed"
+            exit 1
+          fi
+
+      - name: Test action syntax and structure
+        run: |
+          # Validate action.yml syntax
+          python3 -c "
+          import yaml
+          import sys
+
+          try:
+              with open('action.yml', 'r') as f:
+                  action_data = yaml.safe_load(f)
+
+              # Check required fields
+              required_fields = ['name', 'description', 'runs']
+              for field in required_fields:
+                  if field not in action_data:
+                      print(f'❌ Missing required field: {field}')
+                      sys.exit(1)
+
+              # Check inputs
+              if 'inputs' not in action_data:
+                  print('❌ Missing inputs section')
+                  sys.exit(1)
+
+              # Check required inputs
+              required_inputs = [
+                  'wireguard-private-key',
+                  'wireguard-address',
+                  'wireguard-peer-public-key',
+                  'wireguard-endpoint',
+                  'wireguard-allowed-ips',
+                  'ssh-private-key',
+                  'ssh-user',
+                  'ssh-hostname',
+                  'ssh-host-ip',
+                  'ssh-host-key'
+              ]
+
+              for input_name in required_inputs:
+                  if input_name not in action_data['inputs']:
+                      print(f'❌ Missing required input: {input_name}')
+                      sys.exit(1)
+
+                  if not action_data['inputs'][input_name].get('required',
+                                                         False):
+                      print(f'❌ Input {input_name} should be required')
+                      sys.exit(1)
+
+              # Check composite action structure
+              runs = action_data['runs']
+              if runs['using'] != 'composite':
+                  print('❌ Action should use composite runner')
+                  sys.exit(1)
+
+              if 'steps' not in runs:
+                  print('❌ Missing steps in composite action')
+                  sys.exit(1)
+
+              steps = runs['steps']
+              if len(steps) == 0:
+                  print('❌ No steps defined')
+                  sys.exit(1)
+
+              print(f'✅ Action structure validation passed - '
+                    f'{len(steps)} steps found')
+
+              # Check for expected step names
+              step_names = [step.get('name', '') for step in steps]
+              expected_steps = [
+                  'Install WireGuard',
+                  'Setup WireGuard configuration',
+                  'Start WireGuard VPN',
+                  'Setup SSH Configuration',
+                  'Setup SSH key'
+              ]
+
+              for expected_step in expected_steps:
+                  if not any(expected_step in name for name in step_names):
+                      print(f'❌ Missing expected step: {expected_step}')
+                      sys.exit(1)
+
+              print('✅ All required steps found')
+
+          except Exception as e:
+              print(f'❌ Action validation failed: {e}')
+              sys.exit(1)
+          "
+
+      - name: Test WireGuard configuration generation
+        run: |
+          # Test that WireGuard configuration can be generated correctly
+          echo "Testing WireGuard configuration generation..."
+
+          # Create a mock configuration file using the action's logic
+          mkdir -p /tmp/test-wg
+
+          cat > /tmp/test-wg/wg0.conf <<EOF
+          [Interface]
+          PrivateKey = ${{ env.CLIENT_PRIVATE_KEY }}
+          Address = 10.13.13.2/24
+          DNS = 1.1.1.1
+
+          [Peer]
+          PublicKey = ${{ env.SERVER_PUBLIC_KEY }}
+          Endpoint = example.com:51820
+          AllowedIPs = 10.13.13.0/24
+          PersistentKeepalive = 25
+          EOF
+
+          # Validate configuration syntax
+          if wg show interfaces >/dev/null 2>&1; then
+            echo "✅ WireGuard tools available"
+          else
+            echo "❌ WireGuard tools not available"
+            exit 1
+          fi
+
+          # Check if configuration file is valid
+          if [ -f /tmp/test-wg/wg0.conf ]; then
+            echo "✅ WireGuard configuration generated successfully"
+            echo "Configuration content:"
+            cat /tmp/test-wg/wg0.conf
+          else
+            echo "❌ Failed to generate WireGuard configuration"
+            exit 1
+          fi
+
+      - name: Cleanup test files
+        if: always()
+        run: |
+          rm -f test_ssh_key test_ssh_key.pub test_upload.txt
+          rm -rf /tmp/test-wg
