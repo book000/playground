@@ -199,8 +199,9 @@ runs:
         chmod 600 /tmp/id_rsa
 
         # Add server host key to known_hosts for secure connection
-        echo "${{ inputs.ssh-host-ip }} ${{ inputs.ssh-host-key }}" \
-          >> ~/.ssh/known_hosts
+        # Format: hostname,ip ssh-key-type ssh-key-data
+        HOST_ENTRY="${{ inputs.ssh-hostname }},${{ inputs.ssh-host-ip }}"
+        echo "$HOST_ENTRY ${{ inputs.ssh-host-key }}" >> ~/.ssh/known_hosts
         chmod 600 ~/.ssh/known_hosts
 
     - name: Test VPN connectivity

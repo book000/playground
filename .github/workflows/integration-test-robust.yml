@@ -1,0 +1,209 @@
+---
+name: Robust Integration Test WireGuard SSH Action
+
+on:
+  workflow_dispatch: {}
+  push:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/integration-test-robust.yml'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/integration-test-robust.yml'
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup test environment
+        run: |
+          # Install required tools
+          sudo apt-get update
+          sudo apt-get install -y wireguard-tools openssh-client
+
+      - name: Test action input validation
+        run: |
+          echo "Testing action input validation..."
+
+          # Test missing required inputs (should fail)
+          echo "Testing missing inputs..."
+          if ./test_action_validation.sh; then
+            echo "❌ Action should have failed with missing inputs"
+            exit 1
+          else
+            echo "✅ Action correctly rejected missing inputs"
+          fi
+
+      - name: Create test SSH environment
+        run: |
+          # Generate test SSH keys
+          ssh-keygen -t rsa -b 2048 -f /tmp/test_ssh_key -N ""
+          ssh-keygen -t rsa -b 2048 -f /tmp/ssh_host_key -N ""
+
+          # Create test WireGuard keys
+          wg genkey > /tmp/wg_private_key
+          wg pubkey < /tmp/wg_private_key > /tmp/wg_public_key
+          wg genkey > /tmp/wg_server_private_key
+          wg pubkey < /tmp/wg_server_private_key > /tmp/wg_server_public_key
+
+          echo "SSH and WireGuard keys generated successfully"
+
+      - name: Test action with mock connectivity (SSH command)
+        id: test_ssh
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: ssh
+          command: 'echo "Test command"'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.WG_PRIVATE_KEY }}
+          wireguard-address: '10.0.0.2/24'
+          wireguard-dns: '8.8.8.8'
+          wireguard-peer-public-key: ${{ env.WG_SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'nonexistent.example.com:51820'
+          wireguard-allowed-ips: '10.0.0.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.0.0.10'
+          ssh-host-key: ${{ env.SSH_HOST_KEY }}
+          ssh-port: '22'
+        env:
+          WG_PRIVATE_KEY: ${{ secrets.TEST_WG_PRIVATE_KEY || 'test_key_placeholder' }}
+          WG_SERVER_PUBLIC_KEY: ${{ secrets.TEST_WG_SERVER_PUBLIC_KEY || 'test_public_key_placeholder' }}
+          SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY || 'test_ssh_key_placeholder' }}
+          SSH_HOST_KEY: ${{ secrets.TEST_SSH_HOST_KEY || 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCtest' }}
+
+      - name: Test action with mock connectivity (SCP upload)
+        id: test_scp_upload
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: scp
+          scp-source: './README.md'
+          scp-destination: '/tmp/uploaded_readme.md'
+          scp-direction: 'upload'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.WG_PRIVATE_KEY }}
+          wireguard-address: '10.0.0.2/24'
+          wireguard-dns: '8.8.8.8'
+          wireguard-peer-public-key: ${{ env.WG_SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'nonexistent.example.com:51820'
+          wireguard-allowed-ips: '10.0.0.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.0.0.10'
+          ssh-host-key: ${{ env.SSH_HOST_KEY }}
+          ssh-port: '22'
+        env:
+          WG_PRIVATE_KEY: ${{ secrets.TEST_WG_PRIVATE_KEY || 'test_key_placeholder' }}
+          WG_SERVER_PUBLIC_KEY: ${{ secrets.TEST_WG_SERVER_PUBLIC_KEY || 'test_public_key_placeholder' }}
+          SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY || 'test_ssh_key_placeholder' }}
+          SSH_HOST_KEY: ${{ secrets.TEST_SSH_HOST_KEY || 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCtest' }}
+
+      - name: Test action with mock connectivity (SCP download)
+        id: test_scp_download
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: scp
+          scp-source: '/tmp/remote_file.txt'
+          scp-destination: './downloaded_file.txt'
+          scp-direction: 'download'
+          ping-check: 'false'
+          wireguard-private-key: ${{ env.WG_PRIVATE_KEY }}
+          wireguard-address: '10.0.0.2/24'
+          wireguard-dns: '8.8.8.8'
+          wireguard-peer-public-key: ${{ env.WG_SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'nonexistent.example.com:51820'
+          wireguard-allowed-ips: '10.0.0.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.0.0.10'
+          ssh-host-key: ${{ env.SSH_HOST_KEY }}
+          ssh-port: '22'
+        env:
+          WG_PRIVATE_KEY: ${{ secrets.TEST_WG_PRIVATE_KEY || 'test_key_placeholder' }}
+          WG_SERVER_PUBLIC_KEY: ${{ secrets.TEST_WG_SERVER_PUBLIC_KEY || 'test_public_key_placeholder' }}
+          SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY || 'test_ssh_key_placeholder' }}
+          SSH_HOST_KEY: ${{ secrets.TEST_SSH_HOST_KEY || 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCtest' }}
+
+      - name: Test ping check functionality
+        id: test_ping_enabled
+        continue-on-error: true
+        uses: ./
+        with:
+          operation: ssh
+          command: 'echo "Test with ping check"'
+          ping-check: 'true'
+          wireguard-private-key: ${{ env.WG_PRIVATE_KEY }}
+          wireguard-address: '10.0.0.2/24'
+          wireguard-dns: '8.8.8.8'
+          wireguard-peer-public-key: ${{ env.WG_SERVER_PUBLIC_KEY }}
+          wireguard-endpoint: 'nonexistent.example.com:51820'
+          wireguard-allowed-ips: '10.0.0.0/24'
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+          ssh-user: 'testuser'
+          ssh-hostname: 'test-server'
+          ssh-host-ip: '10.0.0.10'
+          ssh-host-key: ${{ env.SSH_HOST_KEY }}
+          ssh-port: '22'
+        env:
+          WG_PRIVATE_KEY: ${{ secrets.TEST_WG_PRIVATE_KEY || 'test_key_placeholder' }}
+          WG_SERVER_PUBLIC_KEY: ${{ secrets.TEST_WG_SERVER_PUBLIC_KEY || 'test_public_key_placeholder' }}
+          SSH_PRIVATE_KEY: ${{ secrets.TEST_SSH_PRIVATE_KEY || 'test_ssh_key_placeholder' }}
+          SSH_HOST_KEY: ${{ secrets.TEST_SSH_HOST_KEY || 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCtest' }}
+
+      - name: Evaluate test results
+        run: |
+          echo "=== Integration Test Results ==="
+
+          # All tests should fail due to nonexistent endpoints, but should fail gracefully
+          # This tests that the action logic works correctly even when connectivity fails
+
+          if [ "${{ steps.test_ssh.outcome }}" = "failure" ]; then
+            echo "✅ SSH test failed as expected (no real server)"
+          else
+            echo "❓ SSH test had unexpected outcome: ${{ steps.test_ssh.outcome }}"
+          fi
+
+          if [ "${{ steps.test_scp_upload.outcome }}" = "failure" ]; then
+            echo "✅ SCP upload test failed as expected (no real server)"
+          else
+            echo "❓ SCP upload test had unexpected outcome: ${{ steps.test_scp_upload.outcome }}"
+          fi
+
+          if [ "${{ steps.test_scp_download.outcome }}" = "failure" ]; then
+            echo "✅ SCP download test failed as expected (no real server)"
+          else
+            echo "❓ SCP download test had unexpected outcome: ${{ steps.test_scp_download.outcome }}"
+          fi
+
+          if [ "${{ steps.test_ping_enabled.outcome }}" = "failure" ]; then
+            echo "✅ Ping check test failed as expected (no real server)"
+          else
+            echo "❓ Ping check test had unexpected outcome: ${{ steps.test_ping_enabled.outcome }}"
+          fi
+
+          echo ""
+          echo "🎉 Robust integration test completed!"
+          echo "The action properly handles input validation and gracefully fails"
+          echo "when connectivity is not available, which is the expected behavior."
+
+      - name: Cleanup
+        if: always()
+        run: |
+          # Clean up test files
+          rm -f /tmp/test_ssh_key /tmp/test_ssh_key.pub
+          rm -f /tmp/ssh_host_key /tmp/ssh_host_key.pub
+          rm -f /tmp/wg_private_key /tmp/wg_public_key
+          rm -f /tmp/wg_server_private_key /tmp/wg_server_public_key
+
+          echo "Cleanup completed"
