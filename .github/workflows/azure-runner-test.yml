@@ -1,0 +1,31 @@
+name: Azure Runner Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  docker-test:
+    runs-on: azure-docker
+    timeout-minutes: 30
+
+    steps:
+      - name: Check runner resources
+        run: |
+          hostname
+          nproc
+          free -h
+          df -h
+
+      - name: Verify Docker daemon
+        run: |
+          sudo systemctl is-active docker
+          sudo docker version
+          sudo docker info
+
+      - name: Run Docker container
+        run: |
+          sudo docker run --rm hello-world
+
+      - name: Run Docker container (not sudo)
+        run: |
+          docker run --rm hello-world
